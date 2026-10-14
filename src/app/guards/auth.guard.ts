@@ -17,3 +17,6 @@ export const adminGuard: CanActivateFn = () =>
 // "/" sends admins to the dashboard and normal users straight to the books list
 export const homeGuard: CanActivateFn = () =>
   inject(Router).createUrlTree([inject(AuthService).session()?.role === 'ADMIN' ? '/dashboard' : '/books']);
+
+
+

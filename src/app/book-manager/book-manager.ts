@@ -19,8 +19,6 @@ type SortDir = 'asc' | 'desc';
 
 const emptyFilters: BookFilters = { category: '', language: '', publisher: '', available: '' };
 
-// How close a piece of text is to what was typed (lower = closer):
-// 0 exact, 1 starts with it, 2 a word inside starts with it, 3 contains it, 9 no match
 function matchScore(text: string | undefined, q: string): number {
   const t = (text ?? '').toLowerCase();
   if (!t || !q) return 9;
@@ -45,16 +43,16 @@ export class BookManager implements OnInit {
   loans = inject(LoanStore);
   tagStyle = tagStyle;
 
-  // normal users (role USER) can only view and search; ADMIN can add, edit and delete
+  
   canEdit = computed(() => this.auth.session()?.role === 'ADMIN');
 
-  // ---------- what the user asked for (all of it is sent to the backend) ----------
-  search = signal(''); // text in the search box
-  query = signal(''); // text that was actually searched
+ 
+  search = signal(''); 
+  query = signal(''); 
   filters = signal<BookFilters>({ ...emptyFilters });
   sort = signal<{ key: SortKey | null; dir: SortDir }>({ key: null, dir: 'asc' });
   pageSize = signal(10);
-  page = signal(1); // 1-based
+  page = signal(1); 
   readonly pageSizes = [10, 25, 50];
 
   // ---------- what came back ----------
@@ -62,8 +60,7 @@ export class BookManager implements OnInit {
   loading = signal(false);
   failed = signal(false);
 
-  // suggestions under the search box
-  suggestions = signal<string[]>([]);
+  // suggestion list state (the list itself is built from the table rows, see below)
   showSuggestions = signal(false);
   activeIndex = signal(-1);
 
@@ -90,6 +87,21 @@ export class BookManager implements OnInit {
       .sort((a, b) => a.s - b.s || a.i - b.i) // equal score keeps the server's order
       .map((x) => x.book);
   });
+
+  // Suggestions under the search box. No extra API call: they are built from the rows the table
+  // already loaded for this search, closest match first.
+  suggestions = computed(() => {
+    const q = this.search().trim().toLowerCase();
+    if (!q) return [];
+    const unique = new Set<string>();
+    this.rankedRows().forEach((b) =>
+      [b.title, b.author].forEach((v) => {
+        if (v && v.toLowerCase().includes(q)) unique.add(v);
+      })
+    );
+    return [...unique].sort((a, b) => matchScore(a, q) - matchScore(b, q)).slice(0, 8);
+  });
+
   total = computed(() => this.result()?.totalElements ?? 0);
   totalPages = computed(() => Math.max(1, this.result()?.totalPages ?? 1));
   rangeStart = computed(() => (this.total() ? (this.page() - 1) * this.pageSize() + 1 : 0));
@@ -113,7 +125,6 @@ export class BookManager implements OnInit {
   skeletonRows = [1, 2, 3, 4, 5, 6];
 
   private searchBox = viewChild<ElementRef<HTMLElement>>('searchBox');
-  private typing$ = new Subject<string>();
   private live$ = new Subject<string>(); // reloads the table while typing
   private load$ = new Subject<void>();
 
@@ -148,44 +159,12 @@ export class BookManager implements OnInit {
         this.result.set(res);
       });
 
-    // Search suggestions (like Amazon): wait 250ms after typing, ask the backend for a few matches,
-    // keep a short list of unique titles / authors.
-    this.typing$
-      .pipe(
-        debounceTime(250),
-        switchMap((text) => {
-          const t = text.trim();
-          if (!t) return of<string[]>([]);
-          const q: BookQuery = { query: t, filters: emptyFilters, sort: null, dir: 'asc', page: 1, size: 20 };
-          return this.bookService.searchPage(q).pipe(
-            map((res) => {
-              const lower = t.toLowerCase();
-              const unique = new Set<string>();
-              res.content.forEach((b) =>
-                [b.title, b.author].forEach((v) => {
-                  if (v && v.toLowerCase().includes(lower)) unique.add(v);
-                })
-              );
-              // closest first: "John Smith" before "Big John"
-              return [...unique]
-                .sort((a, b) => matchScore(a, lower) - matchScore(b, lower))
-                .slice(0, 8);
-            }),
-            catchError(() => of<string[]>([]))
-          );
-        }),
-        takeUntilDestroyed()
-      )
-      .subscribe((list) => {
-        this.suggestions.set(list);
-        this.activeIndex.set(-1);
-      });
-
     // Live table: 300ms after the user stops typing, search and reload the table (no Enter needed).
+    // This is the only search request while typing; the suggestions reuse its rows.
     this.live$
       .pipe(debounceTime(300), map((t) => t.trim()), distinctUntilChanged(), takeUntilDestroyed())
       .subscribe((t) => {
-        if (t === this.query()) return; // Enter / suggestion click already searched this
+        if (t === this.query()) return; // Enter / suggestion click / clear already searched this
         this.query.set(t);
         this.page.set(1);
         this.reload();
@@ -218,7 +197,7 @@ export class BookManager implements OnInit {
   onSearchInput(text: string) {
     this.search.set(text);
     this.showSuggestions.set(true);
-    this.typing$.next(text);
+    this.activeIndex.set(-1);
     this.live$.next(text);
   }
 
@@ -226,7 +205,7 @@ export class BookManager implements OnInit {
     this.search.set(text);
     this.query.set(text.trim());
     this.showSuggestions.set(false);
-    this.typing$.next(text);
+    this.live$.next(text); // keeps a pending live search from overriding this one
     this.page.set(1);
     this.reload();
   }
@@ -234,7 +213,7 @@ export class BookManager implements OnInit {
   clearSearch() {
     this.search.set('');
     this.query.set('');
-    this.suggestions.set([]);
+    this.live$.next('');
     this.page.set(1);
     this.reload();
   }
@@ -248,7 +227,7 @@ export class BookManager implements OnInit {
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       if (n) this.activeIndex.update((i) => (i <= 0 ? n - 1 : i - 1));
-    } else if (e.key === 'Enter' && this.activeIndex() >= 0) {
+    } else if (e.key === 'Enter' && this.suggestions()[this.activeIndex()]) {
       e.preventDefault();
       this.runSearch(this.suggestions()[this.activeIndex()]);
     } else if (e.key === 'Escape') {
@@ -290,8 +269,7 @@ export class BookManager implements OnInit {
     this.reload();
   }
 
-  // ---------- sorting + paging ----------
-  // click a column: ascending -> descending -> back to the default order
+
   toggleSort(key: SortKey) {
     this.sort.update((s) =>
       s.key !== key ? { key, dir: 'asc' } : s.dir === 'asc' ? { key, dir: 'desc' } : { key: null, dir: 'asc' }
