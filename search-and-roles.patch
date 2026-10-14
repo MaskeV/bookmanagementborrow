@@ -1,0 +1,238 @@
+diff --git a/src/app/app.routes.ts b/src/app/app.routes.ts
+index de2d383..defb17b 100644
+--- a/src/app/app.routes.ts
++++ b/src/app/app.routes.ts
+@@ -3,7 +3,7 @@ import { AuthPage } from './auth-page/auth-page';
+ import { BookDialog } from './book-dialog/book-dialog';
+ import { BookManager } from './book-manager/book-manager';
+ import { Dashboard } from './dashboard/dashboard';
+-import { adminGuard, authGuard, guestGuard } from './guards/auth.guard';
++import { adminGuard, authGuard, guestGuard, homeGuard } from './guards/auth.guard';
+ import { Shell } from './layout/shell';
+ import { Profile } from './profile/profile';
+ 
+@@ -15,7 +15,7 @@ export const routes: Routes = [
+     component: Shell,
+     canActivate: [authGuard],
+     children: [
+-      { path: 'dashboard', component: Dashboard },
++      { path: 'dashboard', component: Dashboard, canActivate: [adminGuard] }, // admin only
+       { path: 'profile', component: Profile },
+       {
+         path: 'books',
+@@ -26,7 +26,7 @@ export const routes: Routes = [
+           { path: ':id/edit', component: BookDialog, canActivate: [adminGuard] },
+         ],
+       },
+-      { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
++      { path: '', pathMatch: 'full', canActivate: [homeGuard], children: [] },
+     ],
+   },
+   { path: '**', redirectTo: '' },
+diff --git a/src/app/auth-page/auth-page.ts b/src/app/auth-page/auth-page.ts
+index 7363fa5..91307ae 100644
+--- a/src/app/auth-page/auth-page.ts
++++ b/src/app/auth-page/auth-page.ts
+@@ -54,7 +54,7 @@ export class AuthPage {
+       : this.auth.login({ email: f.email, password: f.password });
+ 
+     request.pipe(finalize(() => this.loading.set(false))).subscribe({
+-      next: () => this.router.navigate(['/dashboard']), // session is saved by AuthService
++      next: () => this.router.navigate(['/']), // session is saved by AuthService
+       error: (err: Error) => this.error.set(err.message),
+     });
+   }
+diff --git a/src/app/book-manager/book-manager.html b/src/app/book-manager/book-manager.html
+index 8a61e4c..1bd149c 100644
+--- a/src/app/book-manager/book-manager.html
++++ b/src/app/book-manager/book-manager.html
+@@ -125,7 +125,7 @@
+                 </tr>
+               }
+             } @else {
+-              @for (book of rows(); track book.id) {
++              @for (book of rankedRows(); track book.id) {
+                 <tr>
+                   <td>
+                     <div class="book">
+@@ -147,17 +147,20 @@
+                   </td>
+                   <td class="desc" [title]="book.description ?? ''">{{ book.description }}</td>
+                   <td class="actions-col">
+-                    @let mine = loans.activeByBook().get(book.id ?? -1);
+-                    @if (mine) {
+-                      <button type="button" class="btn btn-ghost btn-sm" [disabled]="!!loans.busy()" (click)="loans.giveBack(mine)">
+-                        <app-icon name="undo" [size]="14" /> Return
+-                      </button>
+-                    } @else if (canBorrow(book)) {
+-                      <button type="button" class="btn btn-primary btn-sm" [disabled]="!!loans.busy()" (click)="loans.borrow(book)">
+-                        <app-icon name="bookmark" [size]="14" /> Borrow
+-                      </button>
+-                    } @else {
+-                      <span class="unavailable">Unavailable</span>
++                    @if (!canEdit()) {
++                      <!-- borrow / return is for normal users only -->
++                      @let mine = loans.activeByBook().get(book.id ?? -1);
++                      @if (mine) {
++                        <button type="button" class="btn btn-ghost btn-sm" [disabled]="!!loans.busy()" (click)="loans.giveBack(mine)">
++                          <app-icon name="undo" [size]="14" /> Return
++                        </button>
++                      } @else if (canBorrow(book)) {
++                        <button type="button" class="btn btn-primary btn-sm" [disabled]="!!loans.busy()" (click)="loans.borrow(book)">
++                          <app-icon name="bookmark" [size]="14" /> Borrow
++                        </button>
++                      } @else {
++                        <span class="unavailable">Unavailable</span>
++                      }
+                     }
+                     @if (canEdit()) {
+                       <a class="icon-btn" [routerLink]="['/books', book.id, 'edit']" title="Edit" aria-label="Edit book"><app-icon name="pencil" [size]="16" /></a>
+diff --git a/src/app/book-manager/book-manager.ts b/src/app/book-manager/book-manager.ts
+index ab8ad51..ab196f2 100644
+--- a/src/app/book-manager/book-manager.ts
++++ b/src/app/book-manager/book-manager.ts
+@@ -3,7 +3,7 @@ import { Component, ElementRef, HostListener, OnInit, computed, inject, signal,
+ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+ import { FormsModule } from '@angular/forms';
+ import { RouterLink, RouterOutlet } from '@angular/router';
+-import { Subject, catchError, debounceTime, finalize, map, of, switchMap, tap } from 'rxjs';
++import { Subject, catchError, debounceTime, distinctUntilChanged, finalize, map, of, switchMap, tap } from 'rxjs';
+ import { Book, BookFilters, BookQuery, Page } from '../models/book';
+ import { AuthService } from '../services/auth.service';
+ import { BookService } from '../services/book.service';
+@@ -19,6 +19,18 @@ type SortDir = 'asc' | 'desc';
+ 
+ const emptyFilters: BookFilters = { category: '', language: '', publisher: '', available: '' };
+ 
++// How close a piece of text is to what was typed (lower = closer):
++// 0 exact, 1 starts with it, 2 a word inside starts with it, 3 contains it, 9 no match
++function matchScore(text: string | undefined, q: string): number {
++  const t = (text ?? '').toLowerCase();
++  if (!t || !q) return 9;
++  if (t === q) return 0;
++  if (t.startsWith(q)) return 1;
++  if (t.split(/[\s,.\-_/]+/).some((w) => w.startsWith(q))) return 2;
++  if (t.includes(q)) return 3;
++  return 9;
++}
++
+ @Component({
+   selector: 'app-book-manager',
+   imports: [FormsModule, RouterLink, RouterOutlet, Icon],
+@@ -65,6 +77,19 @@ export class BookManager implements OnInit {
+   hasFilters = computed(() => Object.values(this.filters()).some(Boolean));
+ 
+   rows = computed(() => this.result()?.content ?? []);
++
++  // While searching, the closest matches (title or author starting with the typed text, e.g. "John")
++  // go to the top. If the user clicked a column to sort, that order wins.
++  rankedRows = computed(() => {
++    const q = this.query().toLowerCase();
++    const rows = this.rows();
++    if (!q || this.sort().key) return rows;
++    const score = (b: Book) => Math.min(matchScore(b.title, q), matchScore(b.author, q));
++    return rows
++      .map((book, i) => ({ book, i, s: score(book) }))
++      .sort((a, b) => a.s - b.s || a.i - b.i) // equal score keeps the server's order
++      .map((x) => x.book);
++  });
+   total = computed(() => this.result()?.totalElements ?? 0);
+   totalPages = computed(() => Math.max(1, this.result()?.totalPages ?? 1));
+   rangeStart = computed(() => (this.total() ? (this.page() - 1) * this.pageSize() + 1 : 0));
+@@ -89,6 +114,7 @@ export class BookManager implements OnInit {
+ 
+   private searchBox = viewChild<ElementRef<HTMLElement>>('searchBox');
+   private typing$ = new Subject<string>();
++  private live$ = new Subject<string>(); // reloads the table while typing
+   private load$ = new Subject<void>();
+ 
+   constructor() {
+@@ -140,7 +166,10 @@ export class BookManager implements OnInit {
+                   if (v && v.toLowerCase().includes(lower)) unique.add(v);
+                 })
+               );
+-              return [...unique].slice(0, 8);
++              // closest first: "John Smith" before "Big John"
++              return [...unique]
++                .sort((a, b) => matchScore(a, lower) - matchScore(b, lower))
++                .slice(0, 8);
+             }),
+             catchError(() => of<string[]>([]))
+           );
+@@ -152,13 +181,23 @@ export class BookManager implements OnInit {
+         this.activeIndex.set(-1);
+       });
+ 
++    // Live table: 300ms after the user stops typing, search and reload the table (no Enter needed).
++    this.live$
++      .pipe(debounceTime(300), map((t) => t.trim()), distinctUntilChanged(), takeUntilDestroyed())
++      .subscribe((t) => {
++        if (t === this.query()) return; // Enter / suggestion click already searched this
++        this.query.set(t);
++        this.page.set(1);
++        this.reload();
++      });
++
+     // after an add / edit / delete: ask the backend for the current page again
+     this.store.changes.pipe(takeUntilDestroyed()).subscribe(() => this.reload());
+   }
+ 
+   ngOnInit() {
+     this.store.loadOptions();
+-    this.loans.load(); // so each row knows whether I already borrowed it
++    if (!this.canEdit()) this.loans.load(); // normal users only: so each row knows whether I already borrowed it
+     this.reload();
+   }
+ 
+@@ -180,6 +219,7 @@ export class BookManager implements OnInit {
+     this.search.set(text);
+     this.showSuggestions.set(true);
+     this.typing$.next(text);
++    this.live$.next(text);
+   }
+ 
+   runSearch(text: string) {
+diff --git a/src/app/guards/auth.guard.ts b/src/app/guards/auth.guard.ts
+index e52efed..21482c0 100644
+--- a/src/app/guards/auth.guard.ts
++++ b/src/app/guards/auth.guard.ts
+@@ -8,8 +8,12 @@ export const authGuard: CanActivateFn = () =>
+ 
+ // /login is skipped if you are already logged in
+ export const guestGuard: CanActivateFn = () =>
+-  inject(AuthService).isLoggedIn() ? inject(Router).createUrlTree(['/dashboard']) : true;
++  inject(AuthService).isLoggedIn() ? inject(Router).createUrlTree(['/']) : true;
+ 
+ // add / edit popups are for admins only
+ export const adminGuard: CanActivateFn = () =>
+   inject(AuthService).session()?.role === 'ADMIN' ? true : inject(Router).createUrlTree(['/books']);
++
++// "/" sends admins to the dashboard and normal users straight to the books list
++export const homeGuard: CanActivateFn = () =>
++  inject(Router).createUrlTree([inject(AuthService).session()?.role === 'ADMIN' ? '/dashboard' : '/books']);
+diff --git a/src/app/layout/shell.html b/src/app/layout/shell.html
+index 22403e1..2d5ce67 100644
+--- a/src/app/layout/shell.html
++++ b/src/app/layout/shell.html
+@@ -1,14 +1,16 @@
+ <header class="nav">
+   <div class="nav-inner">
+-    <a class="brand" routerLink="/dashboard" aria-label="Book Management home">
++    <a class="brand" [routerLink]="isAdmin() ? '/dashboard' : '/books'" aria-label="Book Management home">
+       <span class="logo"><app-icon name="book" [size]="20" /></span>
+       <span class="brand-name">Book Management</span>
+     </a>
+ 
+     <nav class="links" aria-label="Main">
+-      <a routerLink="/dashboard" routerLinkActive="active">
+-        <app-icon name="dashboard" [size]="18" /><span>Dashboard</span>
+-      </a>
++      @if (isAdmin()) {
++        <a routerLink="/dashboard" routerLinkActive="active">
++          <app-icon name="dashboard" [size]="18" /><span>Dashboard</span>
++        </a>
++      }
+       <a routerLink="/books" routerLinkActive="active">
+         <app-icon name="library" [size]="18" /><span>Books</span>
+       </a>
+

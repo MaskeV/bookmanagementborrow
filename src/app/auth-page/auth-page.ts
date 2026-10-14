@@ -54,7 +54,7 @@ export class AuthPage {
       : this.auth.login({ email: f.email, password: f.password });
 
     request.pipe(finalize(() => this.loading.set(false))).subscribe({
-      next: () => this.router.navigate(['/dashboard']), // session is saved by AuthService
+      next: () => this.router.navigate(['/']), // session is saved by AuthService
       error: (err: Error) => this.error.set(err.message),
     });
   }

@@ -125,7 +125,7 @@
                 </tr>
               }
             } @else {
-              @for (book of rows(); track book.id) {
+              @for (book of rankedRows(); track book.id) {
                 <tr>
                   <td>
                     <div class="book">
@@ -147,17 +147,20 @@
                   </td>
                   <td class="desc" [title]="book.description ?? ''">{{ book.description }}</td>
                   <td class="actions-col">
-                    @let mine = loans.activeByBook().get(book.id ?? -1);
-                    @if (mine) {
-                      <button type="button" class="btn btn-ghost btn-sm" [disabled]="!!loans.busy()" (click)="loans.giveBack(mine)">
-                        <app-icon name="undo" [size]="14" /> Return
-                      </button>
-                    } @else if (canBorrow(book)) {
-                      <button type="button" class="btn btn-primary btn-sm" [disabled]="!!loans.busy()" (click)="loans.borrow(book)">
-                        <app-icon name="bookmark" [size]="14" /> Borrow
-                      </button>
-                    } @else {
-                      <span class="unavailable">Unavailable</span>
+                    @if (!canEdit()) {
+                      <!-- borrow / return is for normal users only -->
+                      @let mine = loans.activeByBook().get(book.id ?? -1);
+                      @if (mine) {
+                        <button type="button" class="btn btn-ghost btn-sm" [disabled]="!!loans.busy()" (click)="loans.giveBack(mine)">
+                          <app-icon name="undo" [size]="14" /> Return
+                        </button>
+                      } @else if (canBorrow(book)) {
+                        <button type="button" class="btn btn-primary btn-sm" [disabled]="!!loans.busy()" (click)="loans.borrow(book)">
+                          <app-icon name="bookmark" [size]="14" /> Borrow
+                        </button>
+                      } @else {
+                        <span class="unavailable">Unavailable</span>
+                      }
                     }
                     @if (canEdit()) {
                       <a class="icon-btn" [routerLink]="['/books', book.id, 'edit']" title="Edit" aria-label="Edit book"><app-icon name="pencil" [size]="16" /></a>

@@ -3,7 +3,7 @@ import { Component, ElementRef, HostListener, OnInit, computed, inject, signal, 
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { RouterLink, RouterOutlet } from '@angular/router';
-import { Subject, catchError, debounceTime, finalize, map, of, switchMap, tap } from 'rxjs';
+import { Subject, catchError, debounceTime, distinctUntilChanged, finalize, map, of, switchMap, tap } from 'rxjs';
 import { Book, BookFilters, BookQuery, Page } from '../models/book';
 import { AuthService } from '../services/auth.service';
 import { BookService } from '../services/book.service';
@@ -18,6 +18,18 @@ type SortKey = 'title' | 'category' | 'language' | 'publicationYear' | 'quantity
 type SortDir = 'asc' | 'desc';
 
 const emptyFilters: BookFilters = { category: '', language: '', publisher: '', available: '' };
+
+// How close a piece of text is to what was typed (lower = closer):
+// 0 exact, 1 starts with it, 2 a word inside starts with it, 3 contains it, 9 no match
+function matchScore(text: string | undefined, q: string): number {
+  const t = (text ?? '').toLowerCase();
+  if (!t || !q) return 9;
+  if (t === q) return 0;
+  if (t.startsWith(q)) return 1;
+  if (t.split(/[\s,.\-_/]+/).some((w) => w.startsWith(q))) return 2;
+  if (t.includes(q)) return 3;
+  return 9;
+}
 
 @Component({
   selector: 'app-book-manager',
@@ -65,6 +77,19 @@ export class BookManager implements OnInit {
   hasFilters = computed(() => Object.values(this.filters()).some(Boolean));
 
   rows = computed(() => this.result()?.content ?? []);
+
+  // While searching, the closest matches (title or author starting with the typed text, e.g. "John")
+  // go to the top. If the user clicked a column to sort, that order wins.
+  rankedRows = computed(() => {
+    const q = this.query().toLowerCase();
+    const rows = this.rows();
+    if (!q || this.sort().key) return rows;
+    const score = (b: Book) => Math.min(matchScore(b.title, q), matchScore(b.author, q));
+    return rows
+      .map((book, i) => ({ book, i, s: score(book) }))
+      .sort((a, b) => a.s - b.s || a.i - b.i) // equal score keeps the server's order
+      .map((x) => x.book);
+  });
   total = computed(() => this.result()?.totalElements ?? 0);
   totalPages = computed(() => Math.max(1, this.result()?.totalPages ?? 1));
   rangeStart = computed(() => (this.total() ? (this.page() - 1) * this.pageSize() + 1 : 0));
@@ -89,6 +114,7 @@ export class BookManager implements OnInit {
 
   private searchBox = viewChild<ElementRef<HTMLElement>>('searchBox');
   private typing$ = new Subject<string>();
+  private live$ = new Subject<string>(); // reloads the table while typing
   private load$ = new Subject<void>();
 
   constructor() {
@@ -140,7 +166,10 @@ export class BookManager implements OnInit {
                   if (v && v.toLowerCase().includes(lower)) unique.add(v);
                 })
               );
-              return [...unique].slice(0, 8);
+              // closest first: "John Smith" before "Big John"
+              return [...unique]
+                .sort((a, b) => matchScore(a, lower) - matchScore(b, lower))
+                .slice(0, 8);
             }),
             catchError(() => of<string[]>([]))
           );
@@ -152,13 +181,23 @@ export class BookManager implements OnInit {
         this.activeIndex.set(-1);
       });
 
+    // Live table: 300ms after the user stops typing, search and reload the table (no Enter needed).
+    this.live$
+      .pipe(debounceTime(300), map((t) => t.trim()), distinctUntilChanged(), takeUntilDestroyed())
+      .subscribe((t) => {
+        if (t === this.query()) return; // Enter / suggestion click already searched this
+        this.query.set(t);
+        this.page.set(1);
+        this.reload();
+      });
+
     // after an add / edit / delete: ask the backend for the current page again
     this.store.changes.pipe(takeUntilDestroyed()).subscribe(() => this.reload());
   }
 
   ngOnInit() {
     this.store.loadOptions();
-    this.loans.load(); // so each row knows whether I already borrowed it
+    if (!this.canEdit()) this.loans.load(); // normal users only: so each row knows whether I already borrowed it
     this.reload();
   }
 
@@ -180,6 +219,7 @@ export class BookManager implements OnInit {
     this.search.set(text);
     this.showSuggestions.set(true);
     this.typing$.next(text);
+    this.live$.next(text);
   }
 
   runSearch(text: string) {

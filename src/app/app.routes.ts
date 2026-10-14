@@ -3,7 +3,7 @@ import { AuthPage } from './auth-page/auth-page';
 import { BookDialog } from './book-dialog/book-dialog';
 import { BookManager } from './book-manager/book-manager';
 import { Dashboard } from './dashboard/dashboard';
-import { adminGuard, authGuard, guestGuard } from './guards/auth.guard';
+import { adminGuard, authGuard, guestGuard, homeGuard } from './guards/auth.guard';
 import { Shell } from './layout/shell';
 import { Profile } from './profile/profile';
 
@@ -15,7 +15,7 @@ export const routes: Routes = [
     component: Shell,
     canActivate: [authGuard],
     children: [
-      { path: 'dashboard', component: Dashboard },
+      { path: 'dashboard', component: Dashboard, canActivate: [adminGuard] }, // admin only
       { path: 'profile', component: Profile },
       {
         path: 'books',
@@ -26,7 +26,7 @@ export const routes: Routes = [
           { path: ':id/edit', component: BookDialog, canActivate: [adminGuard] },
         ],
       },
-      { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
+      { path: '', pathMatch: 'full', canActivate: [homeGuard], children: [] },
     ],
   },
   { path: '**', redirectTo: '' },

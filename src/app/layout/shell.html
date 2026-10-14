@@ -1,14 +1,16 @@
 <header class="nav">
   <div class="nav-inner">
-    <a class="brand" routerLink="/dashboard" aria-label="Book Management home">
+    <a class="brand" [routerLink]="isAdmin() ? '/dashboard' : '/books'" aria-label="Book Management home">
       <span class="logo"><app-icon name="book" [size]="20" /></span>
       <span class="brand-name">Book Management</span>
     </a>
 
     <nav class="links" aria-label="Main">
-      <a routerLink="/dashboard" routerLinkActive="active">
-        <app-icon name="dashboard" [size]="18" /><span>Dashboard</span>
-      </a>
+      @if (isAdmin()) {
+        <a routerLink="/dashboard" routerLinkActive="active">
+          <app-icon name="dashboard" [size]="18" /><span>Dashboard</span>
+        </a>
+      }
       <a routerLink="/books" routerLinkActive="active">
         <app-icon name="library" [size]="18" /><span>Books</span>
       </a>

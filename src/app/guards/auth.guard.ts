@@ -8,8 +8,12 @@ export const authGuard: CanActivateFn = () =>
 
 // /login is skipped if you are already logged in
 export const guestGuard: CanActivateFn = () =>
-  inject(AuthService).isLoggedIn() ? inject(Router).createUrlTree(['/dashboard']) : true;
+  inject(AuthService).isLoggedIn() ? inject(Router).createUrlTree(['/']) : true;
 
 // add / edit popups are for admins only
 export const adminGuard: CanActivateFn = () =>
   inject(AuthService).session()?.role === 'ADMIN' ? true : inject(Router).createUrlTree(['/books']);
+
+// "/" sends admins to the dashboard and normal users straight to the books list
+export const homeGuard: CanActivateFn = () =>
+  inject(Router).createUrlTree([inject(AuthService).session()?.role === 'ADMIN' ? '/dashboard' : '/books']);
