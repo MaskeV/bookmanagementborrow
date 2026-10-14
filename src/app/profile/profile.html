@@ -1,0 +1,115 @@
+<section class="container">
+  <div class="card me">
+    <span class="avatar-xl">{{ initials() }}</span>
+    <div class="me-text">
+      <h1>{{ displayName() }}</h1>
+      @if (email()) { <p class="email">{{ email() }}</p> }
+    </div>
+    @if (user()?.role) {
+      <span class="role-pill" [class.admin]="isAdmin()">{{ user()?.role }}</span>
+    }
+  </div>
+
+  <div class="stats">
+    <article class="card stat">
+      <span class="stat-icon brand"><app-icon name="book" [size]="22" /></span>
+      <div><p class="stat-label">Currently borrowed</p><p class="stat-value">{{ loans.active().length }}</p></div>
+    </article>
+    <article class="card stat">
+      <span class="stat-icon danger"><app-icon name="clock" [size]="22" /></span>
+      <div><p class="stat-label">Overdue</p><p class="stat-value">{{ loans.overdue().length }}</p></div>
+    </article>
+    <article class="card stat">
+      <span class="stat-icon success"><app-icon name="checkCircle" [size]="22" /></span>
+      <div><p class="stat-label">Returned</p><p class="stat-value">{{ loans.history().length }}</p></div>
+    </article>
+    <article class="card stat">
+      <span class="stat-icon info"><app-icon name="library" [size]="22" /></span>
+      <div><p class="stat-label">Total borrowed</p><p class="stat-value">{{ loans.loans().length }}</p></div>
+    </article>
+  </div>
+
+  <div class="card list-card">
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" [class.on]="tab() === 'current'" [attr.aria-selected]="tab() === 'current'" (click)="tab.set('current')">
+        Currently borrowed <span class="count">{{ loans.active().length }}</span>
+      </button>
+      <button type="button" role="tab" [class.on]="tab() === 'history'" [attr.aria-selected]="tab() === 'history'" (click)="tab.set('history')">
+        History <span class="count">{{ loans.history().length }}</span>
+      </button>
+    </div>
+
+    @if (loans.failed()) {
+      <div class="empty-state">
+        <span class="empty-icon"><app-icon name="alert" [size]="26" /></span>
+        <h3>Couldn't load your loans</h3>
+        <button type="button" class="btn btn-ghost" (click)="loans.load(true)"><app-icon name="refresh" [size]="16" /> Retry</button>
+      </div>
+    } @else if (isFirstLoad()) {
+      @for (n of [1, 2, 3]; track n) { <div class="skeleton sk"></div> }
+    } @else if (shown().length === 0) {
+      <div class="empty-state">
+        <span class="empty-icon"><app-icon name="book" [size]="26" /></span>
+        @if (tab() === 'current') {
+          <h3>You haven't borrowed any books</h3>
+          <p>Browse the library and press Borrow on a book.</p>
+          <a class="btn btn-primary" routerLink="/books"><app-icon name="library" [size]="16" /> Browse books</a>
+        } @else {
+          <h3>No returned books yet</h3>
+          <p>Books you give back will be listed here.</p>
+        }
+      </div>
+    } @else {
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Book</th>
+              <th>Borrowed on</th>
+              <th>{{ tab() === 'current' ? 'Due date' : 'Returned on' }}</th>
+              <th>Status</th>
+              @if (tab() === 'current') { <th class="end">Action</th> }
+            </tr>
+          </thead>
+          <tbody>
+            @for (l of shown(); track l.id) {
+              <tr>
+                <td>
+                  <div class="book">
+                    <span class="cover" [style]="tagStyle(l.title)">{{ (l.title || '?').charAt(0).toUpperCase() }}</span>
+                    <div>
+                      <div class="book-title">{{ l.title }}</div>
+                      <div class="book-sub">{{ l.author }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td>{{ l.borrowedAt | date: 'd MMM y' }}</td>
+                <td>
+                  @if (tab() === 'current') {
+                    {{ l.dueDate | date: 'd MMM y' }}
+                    <div class="book-sub" [class.late]="l.status === 'OVERDUE'">{{ dueText(l) }}</div>
+                  } @else {
+                    {{ l.returnedAt | date: 'd MMM y' }}
+                  }
+                </td>
+                <td>
+                  <span class="badge" [class.badge-info]="l.status === 'BORROWED'" [class.badge-danger]="l.status === 'OVERDUE'" [class.badge-success]="l.status === 'RETURNED'">
+                    {{ l.status === 'BORROWED' ? 'Borrowed' : l.status === 'OVERDUE' ? 'Overdue' : 'Returned' }}
+                  </span>
+                </td>
+                @if (tab() === 'current') {
+                  <td class="end">
+                    <button type="button" class="btn btn-ghost btn-sm" [disabled]="!!loans.busy()" (click)="loans.giveBack(l)">
+                      @if (loans.busy() === 'loan-' + l.id) { <span class="spinner"></span> } @else { <app-icon name="undo" [size]="14" /> }
+                      Return
+                    </button>
+                  </td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</section>
