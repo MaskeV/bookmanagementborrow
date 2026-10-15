@@ -5,6 +5,17 @@
     <title>Book Management</title>
     <base href="/">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f4f5fa">
+    <script>
+      // apply the saved / OS theme before the first paint so dark mode doesn't flash white
+      (function () {
+        try {
+          var t = localStorage.getItem('bookmgmt_theme');
+          if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {}
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

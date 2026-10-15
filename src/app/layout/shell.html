@@ -1,66 +1,105 @@
-<header class="nav">
-  <div class="nav-inner">
-    <a class="brand" [routerLink]="isAdmin() ? '/dashboard' : '/books'" aria-label="Book Management home">
-      <span class="logo"><app-icon name="book" [size]="20" /></span>
-      <span class="brand-name">Book Management</span>
-    </a>
-
-    <nav class="links" aria-label="Main">
-      @if (isAdmin()) {
-        <a routerLink="/dashboard" routerLinkActive="active">
-          <app-icon name="dashboard" [size]="18" /><span>Dashboard</span>
-        </a>
-      }
-      <a routerLink="/books" routerLinkActive="active">
-        <app-icon name="library" [size]="18" /><span>Books</span>
+<div class="layout" [class.collapsed]="collapsed()" [class.drawer-open]="drawerOpen()">
+  <!-- ===== Sidebar ===== -->
+  <aside class="sidebar" id="sidebar" aria-label="Sidebar">
+    <div class="sb-head">
+      <a class="brand" [routerLink]="isAdmin() ? '/dashboard' : '/books'" aria-label="Book Management home">
+        <span class="logo"><app-icon name="book" [size]="20" /></span>
+        <span class="brand-text">Book Management</span>
       </a>
-      @if (isAdmin()) {
-        <a routerLink="/loans" routerLinkActive="active">
-          <app-icon name="bookmark" [size]="18" /><span>Loans</span>
-        </a>
+      <button type="button" class="icon-btn sb-close" aria-label="Close menu" (click)="drawerOpen.set(false)">
+        <app-icon name="x" [size]="18" />
+      </button>
+    </div>
+
+    <nav class="sb-nav" aria-label="Main">
+      @for (group of groups(); track group.label) {
+        <p class="sb-label">{{ group.label }}</p>
+        @for (item of group.items; track item.path) {
+          <a class="sb-link" [routerLink]="item.path" routerLinkActive="active"
+            [attr.title]="collapsed() ? item.label : null">
+            <app-icon [name]="item.icon" [size]="19" />
+            <span class="sb-text">{{ item.label }}</span>
+          </a>
+        }
       }
     </nav>
 
-    <div class="actions">
-      @if (isAdmin()) {
-        <a class="btn btn-primary" routerLink="/books/new">
-          <app-icon name="plus" [size]="16" /><span class="add-label">Add book</span>
-        </a>
+    <div class="sb-foot">
+      <button type="button" class="sb-collapse" (click)="toggleCollapsed()"
+        [attr.aria-label]="collapsed() ? 'Expand sidebar' : 'Collapse sidebar'"
+        [attr.title]="collapsed() ? 'Expand sidebar' : null">
+        <app-icon name="chevronsLeft" [size]="19" />
+        <span class="sb-text">Collapse</span>
+      </button>
+    </div>
+  </aside>
+  <div class="scrim" (click)="drawerOpen.set(false)"></div>
+
+  <!-- ===== Top bar + page ===== -->
+  <div class="main-col">
+    <header class="topbar">
+      <button type="button" class="icon-btn menu-btn" aria-label="Open menu" aria-controls="sidebar"
+        [attr.aria-expanded]="drawerOpen()" (click)="drawerOpen.set(true)">
+        <app-icon name="menu" [size]="20" />
+      </button>
+
+      @if (crumb(); as c) {
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <span class="crumb-section">{{ c.section }}</span>
+          <span class="crumb-sep"><app-icon name="chevronRight" [size]="14" /></span>
+          <span class="crumb-page" aria-current="page">{{ c.page }}</span>
+        </nav>
       }
 
-      <div class="user-menu" #menu>
-        <button type="button" class="user-btn" (click)="menuOpen.set(!menuOpen())"
-          [attr.aria-expanded]="menuOpen()" aria-haspopup="true">
-          <span class="avatar">{{ initials() }}</span>
-          <span class="user-name">{{ displayName() }}</span>
-          <app-icon name="chevronDown" [size]="16" />
+      <div class="actions">
+        @if (isAdmin()) {
+          <a class="btn btn-primary" routerLink="/books/new">
+            <app-icon name="plus" [size]="16" /><span class="add-label">Add book</span>
+          </a>
+        }
+
+        <button type="button" class="icon-btn theme-btn" (click)="theme.toggle()"
+          [attr.aria-label]="theme.isDark() ? 'Switch to light theme' : 'Switch to dark theme'"
+          [attr.title]="theme.isDark() ? 'Light theme' : 'Dark theme'">
+          <app-icon [name]="theme.isDark() ? 'sun' : 'moon'" [size]="18" />
         </button>
 
-        @if (menuOpen()) {
-          <div class="dropdown" role="menu">
-            <div class="dropdown-head">
-              <span class="avatar lg">{{ initials() }}</span>
-              <div>
-                <p class="dd-name">{{ displayName() }}</p>
-                @if (user()?.email) { <p class="dd-email">{{ user()?.email }}</p> }
-              </div>
-            </div>
-            @if (user()?.role) {
-              <p class="dd-role"><span class="role-pill" [class.admin]="isAdmin()">{{ user()?.role }}</span></p>
-            }
-            <a class="dd-item" role="menuitem" routerLink="/profile" (click)="menuOpen.set(false)">
-              <app-icon name="user" [size]="16" /> My profile
-            </a>
-            <button type="button" class="dd-item danger" role="menuitem" (click)="logout()">
-              <app-icon name="logout" [size]="16" /> Log out
-            </button>
-          </div>
-        }
-      </div>
-    </div>
-  </div>
-</header>
+        <div class="user-menu" #menu>
+          <button type="button" class="user-btn" (click)="menuOpen.set(!menuOpen())"
+            [attr.aria-expanded]="menuOpen()" aria-haspopup="true">
+            <span class="avatar">{{ initials() }}</span>
+            <span class="user-name">{{ displayName() }}</span>
+            <app-icon name="chevronDown" [size]="16" />
+          </button>
 
-<main>
-  <router-outlet />
-</main>
+          @if (menuOpen()) {
+            <div class="dropdown" role="menu">
+              <div class="dropdown-head">
+                <span class="avatar lg">{{ initials() }}</span>
+                <div>
+                  <p class="dd-name">{{ displayName() }}</p>
+                  @if (user()?.email) { <p class="dd-email">{{ user()?.email }}</p> }
+                </div>
+              </div>
+              @if (user()?.role) {
+                <p class="dd-role"><span class="role-pill" [class.admin]="isAdmin()">{{ user()?.role }}</span></p>
+              }
+             @if (!isAdmin()) {
+  <a class="dd-item" role="menuitem" routerLink="/profile" (click)="menuOpen.set(false)">
+    <app-icon name="user" [size]="16" /> My profile
+  </a>
+}
+              <button type="button" class="dd-item danger" role="menuitem" (click)="logout()">
+                <app-icon name="logout" [size]="16" /> Log out
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <router-outlet />
+    </main>
+  </div>
+</div>

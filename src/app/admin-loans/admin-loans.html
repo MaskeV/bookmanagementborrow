@@ -2,56 +2,160 @@
   <div class="page-head">
     <div>
       <h1>Loans</h1>
-      <p class="sub">See who borrowed which book and whether it has been returned</p>
+      <p class="sub">
+        Track who borrowed what, what is due soon and what is late
+        @if (updatedAt()) { <span class="updated">· updated {{ updatedAt() | date: 'h:mm a' }}</span> }
+      </p>
     </div>
     <div class="head-actions">
       <button type="button" class="btn btn-ghost" [disabled]="loading()" (click)="load()">
         @if (loading()) { <span class="spinner"></span> } @else { <app-icon name="refresh" [size]="16" /> }
         Refresh
       </button>
+      <button type="button" class="btn btn-primary" [disabled]="total() === 0" (click)="exportCsv()">
+        <app-icon name="download" [size]="16" /> Export CSV
+      </button>
     </div>
   </div>
 
+  <!-- ===== Summary (follows the filters below, except the status tabs) ===== -->
   <div class="stats">
     <article class="card stat">
       <span class="stat-icon info"><app-icon name="library" [size]="22" /></span>
-      <div><p class="stat-label">Total loans</p><p class="stat-value">{{ loans().length }}</p></div>
+      <div>
+        <p class="stat-label">Total loans</p>
+        <p class="stat-value">{{ scoped().length }}</p>
+        <p class="stat-sub">{{ chips().length ? 'matching your filters' : 'all time' }}</p>
+      </div>
     </article>
     <article class="card stat">
       <span class="stat-icon brand"><app-icon name="book" [size]="22" /></span>
-      <div><p class="stat-label">Currently borrowed</p><p class="stat-value">{{ active().length }}</p></div>
+      <div>
+        <p class="stat-label">Currently borrowed</p>
+        <p class="stat-value">{{ active().length }}</p>
+        <p class="stat-sub">{{ dueSoon().length }} due within 3 days</p>
+      </div>
     </article>
     <article class="card stat">
       <span class="stat-icon danger"><app-icon name="clock" [size]="22" /></span>
-      <div><p class="stat-label">Overdue</p><p class="stat-value">{{ overdue().length }}</p></div>
+      <div>
+        <p class="stat-label">Overdue</p>
+        <p class="stat-value">{{ overdue().length }}</p>
+        <p class="stat-sub">
+          @if (overdue().length) { longest: {{ longestOverdue() }} {{ longestOverdue() === 1 ? 'day' : 'days' }} late } @else { nothing is late }
+        </p>
+      </div>
     </article>
     <article class="card stat">
       <span class="stat-icon success"><app-icon name="checkCircle" [size]="22" /></span>
-      <div><p class="stat-label">Returned</p><p class="stat-value">{{ returned().length }}</p></div>
+      <div>
+        <p class="stat-label">Returned</p>
+        <p class="stat-value">{{ returned().length }}</p>
+        <p class="stat-sub">{{ returnRate() }}% return rate</p>
+      </div>
     </article>
   </div>
 
+  <!-- ===== Filters ===== -->
+  <div class="card filters">
+    <div class="f-row">
+      <label class="search">
+        <app-icon name="search" [size]="17" />
+        <input class="control" name="loanSearch" placeholder="Search by borrower, book or author…" autocomplete="off"
+          [ngModel]="search()" (ngModelChange)="setSearch($event)" />
+        @if (search()) {
+          <button type="button" class="icon-btn clear" aria-label="Clear search" (click)="setSearch('')"><app-icon name="x" [size]="15" /></button>
+        }
+      </label>
+      <button type="button" class="btn btn-ghost" [attr.aria-expanded]="moreOpen()" (click)="moreOpen.set(!moreOpen())">
+        <app-icon name="sliders" [size]="16" /> More filters
+        @if (extraCount()) { <span class="dot-count">{{ extraCount() }}</span> }
+        <app-icon [name]="moreOpen() ? 'chevronUp' : 'chevronDown'" [size]="14" />
+      </button>
+    </div>
+
+    <div class="f-row range">
+      <label class="basis">
+        <span class="f-label">Date</span>
+        <select class="control" [ngModel]="dateField()" (ngModelChange)="setDateField($event)" aria-label="Which date to filter by">
+          <option value="borrowedAt">Borrowed on</option>
+          <option value="dueDate">Due on</option>
+          <option value="returnedAt">Returned on</option>
+        </select>
+      </label>
+      <div class="chips" role="group" aria-label="Date range">
+        @for (p of presets; track p.id) {
+          <button type="button" class="chip-btn" [class.on]="preset() === p.id" [attr.aria-pressed]="preset() === p.id" (click)="setPreset(p.id)">
+            @if (p.id === 'custom') { <app-icon name="calendar" [size]="14" /> }
+            {{ p.label }}
+          </button>
+        }
+      </div>
+    </div>
+
+    @if (preset() === 'custom') {
+      <div class="f-row custom">
+        <label class="field">From
+          <input type="date" class="control" [ngModel]="customFrom()" [attr.max]="customTo() || null" (ngModelChange)="setCustom('from', $event)" />
+        </label>
+        <label class="field">To
+          <input type="date" class="control" [ngModel]="customTo()" [attr.min]="customFrom() || null" (ngModelChange)="setCustom('to', $event)" />
+        </label>
+        @if (range().invalid) {
+          <p class="err" role="alert"><app-icon name="alert" [size]="14" /> The start date is after the end date.</p>
+        }
+      </div>
+    }
+
+    @if (moreOpen()) {
+      <div class="f-row more">
+        <label class="field">Category
+          <select class="control" [ngModel]="category()" (ngModelChange)="setCategory($event)">
+            <option value="">All categories</option>
+            @for (c of categories(); track c) { <option [value]="c">{{ c }}</option> }
+          </select>
+        </label>
+        <label class="field">Borrower
+          <select class="control" [ngModel]="borrower()" (ngModelChange)="setBorrower($event)">
+            <option value="">Everyone</option>
+            @for (b of borrowers(); track b.email) { <option [value]="b.email">{{ b.name }}</option> }
+          </select>
+        </label>
+        <label class="field">Overdue by
+          <select class="control" [ngModel]="minOverdue()" (ngModelChange)="setMinOverdue($event)">
+            @for (o of overdueOptions; track o.value) { <option [ngValue]="o.value">{{ o.label }}</option> }
+          </select>
+        </label>
+      </div>
+    }
+
+    @if (chips().length) {
+      <div class="f-row applied">
+        <span class="f-label">Applied</span>
+        @for (c of chips(); track c.key) {
+          <span class="chip">{{ c.label }}
+            <button type="button" [attr.aria-label]="'Remove filter ' + c.label" (click)="removeChip(c.key)"><app-icon name="x" [size]="12" /></button>
+          </span>
+        }
+        <button type="button" class="link-btn" (click)="clearAll()">Clear all</button>
+      </div>
+    }
+  </div>
+
+  <!-- ===== Table ===== -->
   <div class="card list-card">
     <div class="toolbar">
       <div class="tabs" role="tablist">
-        <button type="button" role="tab" [class.on]="filter() === 'all'" [attr.aria-selected]="filter() === 'all'" (click)="filter.set('all')">
-          All <span class="count">{{ loans().length }}</span>
-        </button>
-        <button type="button" role="tab" [class.on]="filter() === 'active'" [attr.aria-selected]="filter() === 'active'" (click)="filter.set('active')">
-          Borrowed <span class="count">{{ active().length }}</span>
-        </button>
-        <button type="button" role="tab" [class.on]="filter() === 'overdue'" [attr.aria-selected]="filter() === 'overdue'" (click)="filter.set('overdue')">
-          Overdue <span class="count">{{ overdue().length }}</span>
-        </button>
-        <button type="button" role="tab" [class.on]="filter() === 'returned'" [attr.aria-selected]="filter() === 'returned'" (click)="filter.set('returned')">
-          Returned <span class="count">{{ returned().length }}</span>
-        </button>
+        @for (t of tabs(); track t.id) {
+          <button type="button" role="tab" [class.on]="status() === t.id" [attr.aria-selected]="status() === t.id" (click)="setStatus(t.id)">
+            {{ t.label }} <span class="count" [class.danger]="t.id === 'overdue' && t.count > 0">{{ t.count }}</span>
+          </button>
+        }
       </div>
-      <label class="search">
-        <app-icon name="search" [size]="16" />
-        <input class="control" name="loanSearch" placeholder="Search by user or book…" autocomplete="off"
-          [ngModel]="search()" (ngModelChange)="search.set($event)" />
-      </label>
+      <p class="summary">
+        <b>{{ total() }}</b> {{ total() === 1 ? 'loan' : 'loans' }}
+        @if (preset() !== 'all' && rangeText()) { · {{ fieldLabel().toLowerCase() }} {{ rangeText() }} }
+      </p>
     </div>
 
     @if (failed()) {
@@ -62,34 +166,36 @@
         <button type="button" class="btn btn-ghost" (click)="load()"><app-icon name="refresh" [size]="16" /> Retry</button>
       </div>
     } @else if (!loaded()) {
-      @for (n of [1, 2, 3, 4]; track n) { <div class="skeleton sk"></div> }
-    } @else if (shown().length === 0) {
+      @for (n of [1, 2, 3, 4, 5]; track n) { <div class="skeleton sk"></div> }
+    } @else if (total() === 0) {
       <div class="empty-state">
-        <span class="empty-icon"><app-icon name="bookmark" [size]="26" /></span>
+        <span class="empty-icon"><app-icon [name]="loans().length ? 'filterX' : 'bookmark'" [size]="26" /></span>
         @if (loans().length === 0) {
           <h3>No loans yet</h3>
           <p>Once users borrow books, they will show up here.</p>
         } @else {
-          <h3>No loans match</h3>
-          <p>Try another tab or a different search.</p>
+          <h3>No loans match these filters</h3>
+          <p>Try a wider date range or remove a filter.</p>
+          <button type="button" class="btn btn-ghost" (click)="clearAll()"><app-icon name="x" [size]="16" /> Clear all filters</button>
         }
       </div>
     } @else {
       <div class="table-scroll">
-        <table>
+        <table class="data-table">
           <thead>
             <tr>
-              <th>Borrower</th>
-              <th>Book</th>
-              <th>Borrowed on</th>
-              <th>Due date</th>
-              <th>Returned on</th>
-              <th>Status</th>
+              @for (c of columns; track c.key) {
+                <th [attr.aria-sort]="ariaSort(c.key)">
+                  <button type="button" class="th-btn" [class.on]="sortKey() === c.key" (click)="sortBy(c.key)">
+                    {{ c.label }} <app-icon [name]="sortIcon(c.key)" [size]="13" />
+                  </button>
+                </th>
+              }
             </tr>
           </thead>
           <tbody>
-            @for (l of shown(); track l.id) {
-              <tr>
+            @for (l of rows(); track l.id) {
+              <tr [class.is-overdue]="isOverdue(l)">
                 <td>
                   <div class="person">
                     <span class="avatar">{{ initials(l.userName) }}</span>
@@ -104,29 +210,50 @@
                     <span class="cover" [style]="tagStyle(l.title)">{{ (l.title || '?').charAt(0).toUpperCase() }}</span>
                     <div>
                       <div class="strong">{{ l.title }}</div>
-                      <div class="sub-line">{{ l.author }}</div>
+                      <div class="sub-line">{{ l.author }}@if (l.category) { · {{ l.category }} }</div>
                     </div>
                   </div>
                 </td>
-                <td>{{ l.borrowedAt | date: 'd MMM y, h:mm a' }}</td>
+                <td>{{ l.borrowedAt | date: 'd MMM y' }}<div class="sub-line">{{ l.borrowedAt | date: 'h:mm a' }}</div></td>
                 <td>
                   {{ l.dueDate | date: 'd MMM y' }}
                   @if (!l.returnedAt) {
-                    <div class="sub-line" [class.late]="l.status === 'OVERDUE'">{{ dueText(l) }}</div>
+                    <div class="sub-line" [class.late]="isOverdue(l)" [class.soon]="isDueSoon(l, now())">{{ dueText(l) }}</div>
                   }
                 </td>
                 <td>
-                  @if (l.returnedAt) { {{ l.returnedAt | date: 'd MMM y, h:mm a' }} } @else { <span class="muted">Not returned yet</span> }
+                  @if (l.returnedAt) {
+                    {{ l.returnedAt | date: 'd MMM y' }}
+                    <div class="sub-line">{{ l.returnedAt | date: 'h:mm a' }}</div>
+                  } @else { <span class="muted">Not returned yet</span> }
                 </td>
                 <td>
                   <span class="badge" [class.badge-info]="l.status === 'BORROWED'" [class.badge-danger]="l.status === 'OVERDUE'" [class.badge-success]="l.status === 'RETURNED'">
-                    {{ l.status === 'BORROWED' ? 'Borrowed' : l.status === 'OVERDUE' ? 'Overdue' : 'Returned' }}
+                    {{ statusLabel(l) }}
                   </span>
+                  @if (l.returnedAt && lateText(l)) { <div class="sub-line late">{{ lateText(l) }}</div> }
                 </td>
               </tr>
             }
           </tbody>
         </table>
+      </div>
+
+      <div class="pager">
+        <p>Showing <b>{{ fromRow() }}–{{ toRow() }}</b> of <b>{{ total() }}</b></p>
+        <div class="pager-controls">
+          <label class="per-page">Rows
+            <select class="control" [ngModel]="pageSize()" (ngModelChange)="setPageSize($event)" aria-label="Rows per page">
+              @for (n of pageSizes; track n) { <option [ngValue]="n">{{ n }}</option> }
+            </select>
+          </label>
+          <button type="button" class="icon-btn" aria-label="Previous page" [disabled]="current() === 1" (click)="goto(current() - 1)"><app-icon name="chevronLeft" [size]="18" /></button>
+          @for (p of pages(); track $index) {
+            @if (p === '…') { <span class="gap">…</span> }
+            @else { <button type="button" class="page-btn" [class.on]="p === current()" [attr.aria-current]="p === current() ? 'page' : null" (click)="goto(+p)">{{ p }}</button> }
+          }
+          <button type="button" class="icon-btn" aria-label="Next page" [disabled]="current() === pageCount()" (click)="goto(current() + 1)"><app-icon name="chevronRight" [size]="18" /></button>
+        </div>
       </div>
     }
   </div>
