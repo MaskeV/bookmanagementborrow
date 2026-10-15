@@ -14,6 +14,11 @@ export class LoanService {
     return this.http.get<Loan[]>(`${LOANS_URL}/my`);
   }
 
+  // ADMIN only: every loan of every user
+  allLoans(): Observable<Loan[]> {
+    return this.http.get<Loan[]>(LOANS_URL);
+  }
+
   borrow(bookId: number | string): Observable<Loan> {
     return this.http.post<Loan>(`${LOANS_URL}/${bookId}`, null);
   }

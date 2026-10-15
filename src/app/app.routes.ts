@@ -5,6 +5,7 @@ import { BookManager } from './book-manager/book-manager';
 import { Dashboard } from './dashboard/dashboard';
 import { adminGuard, authGuard, guestGuard, homeGuard } from './guards/auth.guard';
 import { Shell } from './layout/shell';
+import { AdminLoans } from './admin-loans/admin-loans';
 import { Profile } from './profile/profile';
 
 export const routes: Routes = [
@@ -16,6 +17,7 @@ export const routes: Routes = [
     canActivate: [authGuard],
     children: [
       { path: 'dashboard', component: Dashboard, canActivate: [adminGuard] }, // admin only
+      { path: 'loans', component: AdminLoans, canActivate: [adminGuard] }, // admin only: who borrowed / returned what
       { path: 'profile', component: Profile },
       {
         path: 'books',

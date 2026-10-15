@@ -1,0 +1,133 @@
+<section class="container">
+  <div class="page-head">
+    <div>
+      <h1>Loans</h1>
+      <p class="sub">See who borrowed which book and whether it has been returned</p>
+    </div>
+    <div class="head-actions">
+      <button type="button" class="btn btn-ghost" [disabled]="loading()" (click)="load()">
+        @if (loading()) { <span class="spinner"></span> } @else { <app-icon name="refresh" [size]="16" /> }
+        Refresh
+      </button>
+    </div>
+  </div>
+
+  <div class="stats">
+    <article class="card stat">
+      <span class="stat-icon info"><app-icon name="library" [size]="22" /></span>
+      <div><p class="stat-label">Total loans</p><p class="stat-value">{{ loans().length }}</p></div>
+    </article>
+    <article class="card stat">
+      <span class="stat-icon brand"><app-icon name="book" [size]="22" /></span>
+      <div><p class="stat-label">Currently borrowed</p><p class="stat-value">{{ active().length }}</p></div>
+    </article>
+    <article class="card stat">
+      <span class="stat-icon danger"><app-icon name="clock" [size]="22" /></span>
+      <div><p class="stat-label">Overdue</p><p class="stat-value">{{ overdue().length }}</p></div>
+    </article>
+    <article class="card stat">
+      <span class="stat-icon success"><app-icon name="checkCircle" [size]="22" /></span>
+      <div><p class="stat-label">Returned</p><p class="stat-value">{{ returned().length }}</p></div>
+    </article>
+  </div>
+
+  <div class="card list-card">
+    <div class="toolbar">
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" [class.on]="filter() === 'all'" [attr.aria-selected]="filter() === 'all'" (click)="filter.set('all')">
+          All <span class="count">{{ loans().length }}</span>
+        </button>
+        <button type="button" role="tab" [class.on]="filter() === 'active'" [attr.aria-selected]="filter() === 'active'" (click)="filter.set('active')">
+          Borrowed <span class="count">{{ active().length }}</span>
+        </button>
+        <button type="button" role="tab" [class.on]="filter() === 'overdue'" [attr.aria-selected]="filter() === 'overdue'" (click)="filter.set('overdue')">
+          Overdue <span class="count">{{ overdue().length }}</span>
+        </button>
+        <button type="button" role="tab" [class.on]="filter() === 'returned'" [attr.aria-selected]="filter() === 'returned'" (click)="filter.set('returned')">
+          Returned <span class="count">{{ returned().length }}</span>
+        </button>
+      </div>
+      <label class="search">
+        <app-icon name="search" [size]="16" />
+        <input class="control" name="loanSearch" placeholder="Search by user or book…" autocomplete="off"
+          [ngModel]="search()" (ngModelChange)="search.set($event)" />
+      </label>
+    </div>
+
+    @if (failed()) {
+      <div class="empty-state">
+        <span class="empty-icon"><app-icon name="alert" [size]="26" /></span>
+        <h3>Couldn't load the loans</h3>
+        <p>Check that the backend is running and that you are logged in as an admin.</p>
+        <button type="button" class="btn btn-ghost" (click)="load()"><app-icon name="refresh" [size]="16" /> Retry</button>
+      </div>
+    } @else if (!loaded()) {
+      @for (n of [1, 2, 3, 4]; track n) { <div class="skeleton sk"></div> }
+    } @else if (shown().length === 0) {
+      <div class="empty-state">
+        <span class="empty-icon"><app-icon name="bookmark" [size]="26" /></span>
+        @if (loans().length === 0) {
+          <h3>No loans yet</h3>
+          <p>Once users borrow books, they will show up here.</p>
+        } @else {
+          <h3>No loans match</h3>
+          <p>Try another tab or a different search.</p>
+        }
+      </div>
+    } @else {
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Borrower</th>
+              <th>Book</th>
+              <th>Borrowed on</th>
+              <th>Due date</th>
+              <th>Returned on</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (l of shown(); track l.id) {
+              <tr>
+                <td>
+                  <div class="person">
+                    <span class="avatar">{{ initials(l.userName) }}</span>
+                    <div>
+                      <div class="strong">{{ l.userName }}</div>
+                      <div class="sub-line">{{ l.userEmail }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <div class="book">
+                    <span class="cover" [style]="tagStyle(l.title)">{{ (l.title || '?').charAt(0).toUpperCase() }}</span>
+                    <div>
+                      <div class="strong">{{ l.title }}</div>
+                      <div class="sub-line">{{ l.author }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td>{{ l.borrowedAt | date: 'd MMM y, h:mm a' }}</td>
+                <td>
+                  {{ l.dueDate | date: 'd MMM y' }}
+                  @if (!l.returnedAt) {
+                    <div class="sub-line" [class.late]="l.status === 'OVERDUE'">{{ dueText(l) }}</div>
+                  }
+                </td>
+                <td>
+                  @if (l.returnedAt) { {{ l.returnedAt | date: 'd MMM y, h:mm a' }} } @else { <span class="muted">Not returned yet</span> }
+                </td>
+                <td>
+                  <span class="badge" [class.badge-info]="l.status === 'BORROWED'" [class.badge-danger]="l.status === 'OVERDUE'" [class.badge-success]="l.status === 'RETURNED'">
+                    {{ l.status === 'BORROWED' ? 'Borrowed' : l.status === 'OVERDUE' ? 'Overdue' : 'Returned' }}
+                  </span>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</section>

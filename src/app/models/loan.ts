@@ -11,4 +11,7 @@ export interface Loan {
   dueDate: string;
   returnedAt: string | null;
   status: LoanStatus;
+  // who borrowed it (always sent by the backend; shown on the admin Loans page)
+  userName: string;
+  userEmail: string;
 }

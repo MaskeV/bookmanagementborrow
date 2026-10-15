@@ -1,238 +1,339 @@
+diff --git a/src/app/admin-loans/admin-loans.css b/src/app/admin-loans/admin-loans.css
+new file mode 100644
+index 0000000..3e97e6f
+--- /dev/null
++++ b/src/app/admin-loans/admin-loans.css
+@@ -0,0 +1,40 @@
++:host { display: block; }
++
++.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 20px; }
++.stat { display: flex; align-items: center; gap: 14px; padding: 18px; }
++.stat-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; flex: none; }
++.stat-icon.brand { background: var(--brand-50); color: var(--brand-600); }
++.stat-icon.info { background: var(--info-bg); color: var(--info); }
++.stat-icon.success { background: var(--success-bg); color: var(--success); }
++.stat-icon.danger { background: var(--danger-bg); color: var(--danger); }
++.stat-label { color: var(--text-2); font-weight: 500; }
++.stat-value { font-size: 26px; font-weight: 700; line-height: 1.2; }
++
++.list-card { overflow: hidden; }
++.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 0 12px; border-bottom: 1px solid var(--border); }
++.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
++.tabs button { position: relative; padding: 14px 12px; border: none; background: none; font-weight: 600; color: var(--text-2); }
++.tabs button.on { color: var(--brand-600); }
++.tabs button.on::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; background: var(--brand-600); border-radius: 2px; }
++.count { margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #f1f5f9; font-size: 12px; }
++
++.search { position: relative; display: block; width: 280px; max-width: 100%; margin: 8px 0; color: var(--muted); }
++.search app-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); pointer-events: none; }
++.search .control { padding-left: 34px; }
++
++.sk { height: 52px; margin: 16px 20px; }
++.table-scroll { overflow-x: auto; }
++table { width: 100%; min-width: 860px; border-collapse: collapse; }
++th { padding: 11px 16px; text-align: left; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-2); background: #f8fafc; border-bottom: 1px solid var(--border); white-space: nowrap; }
++td { padding: 14px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
++tbody tr:last-child td { border-bottom: none; }
++
++.person, .book { display: flex; align-items: center; gap: 12px; }
++.avatar { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; font-size: 13px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #4338ca, #0e7490); flex: none; }
++.cover { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; font-weight: 700; flex: none; }
++.strong { font-weight: 600; }
++.sub-line { font-size: 12px; color: var(--text-2); }
++.sub-line.late { color: var(--danger); font-weight: 600; }
++.muted { color: var(--muted); }
++
++@media (max-width: 560px) { .search { width: 100%; } }
+diff --git a/src/app/admin-loans/admin-loans.html b/src/app/admin-loans/admin-loans.html
+new file mode 100644
+index 0000000..6fa3a64
+--- /dev/null
++++ b/src/app/admin-loans/admin-loans.html
+@@ -0,0 +1,133 @@
++<section class="container">
++  <div class="page-head">
++    <div>
++      <h1>Loans</h1>
++      <p class="sub">See who borrowed which book and whether it has been returned</p>
++    </div>
++    <div class="head-actions">
++      <button type="button" class="btn btn-ghost" [disabled]="loading()" (click)="load()">
++        @if (loading()) { <span class="spinner"></span> } @else { <app-icon name="refresh" [size]="16" /> }
++        Refresh
++      </button>
++    </div>
++  </div>
++
++  <div class="stats">
++    <article class="card stat">
++      <span class="stat-icon info"><app-icon name="library" [size]="22" /></span>
++      <div><p class="stat-label">Total loans</p><p class="stat-value">{{ loans().length }}</p></div>
++    </article>
++    <article class="card stat">
++      <span class="stat-icon brand"><app-icon name="book" [size]="22" /></span>
++      <div><p class="stat-label">Currently borrowed</p><p class="stat-value">{{ active().length }}</p></div>
++    </article>
++    <article class="card stat">
++      <span class="stat-icon danger"><app-icon name="clock" [size]="22" /></span>
++      <div><p class="stat-label">Overdue</p><p class="stat-value">{{ overdue().length }}</p></div>
++    </article>
++    <article class="card stat">
++      <span class="stat-icon success"><app-icon name="checkCircle" [size]="22" /></span>
++      <div><p class="stat-label">Returned</p><p class="stat-value">{{ returned().length }}</p></div>
++    </article>
++  </div>
++
++  <div class="card list-card">
++    <div class="toolbar">
++      <div class="tabs" role="tablist">
++        <button type="button" role="tab" [class.on]="filter() === 'all'" [attr.aria-selected]="filter() === 'all'" (click)="filter.set('all')">
++          All <span class="count">{{ loans().length }}</span>
++        </button>
++        <button type="button" role="tab" [class.on]="filter() === 'active'" [attr.aria-selected]="filter() === 'active'" (click)="filter.set('active')">
++          Borrowed <span class="count">{{ active().length }}</span>
++        </button>
++        <button type="button" role="tab" [class.on]="filter() === 'overdue'" [attr.aria-selected]="filter() === 'overdue'" (click)="filter.set('overdue')">
++          Overdue <span class="count">{{ overdue().length }}</span>
++        </button>
++        <button type="button" role="tab" [class.on]="filter() === 'returned'" [attr.aria-selected]="filter() === 'returned'" (click)="filter.set('returned')">
++          Returned <span class="count">{{ returned().length }}</span>
++        </button>
++      </div>
++      <label class="search">
++        <app-icon name="search" [size]="16" />
++        <input class="control" name="loanSearch" placeholder="Search by user or book…" autocomplete="off"
++          [ngModel]="search()" (ngModelChange)="search.set($event)" />
++      </label>
++    </div>
++
++    @if (failed()) {
++      <div class="empty-state">
++        <span class="empty-icon"><app-icon name="alert" [size]="26" /></span>
++        <h3>Couldn't load the loans</h3>
++        <p>Check that the backend is running and that you are logged in as an admin.</p>
++        <button type="button" class="btn btn-ghost" (click)="load()"><app-icon name="refresh" [size]="16" /> Retry</button>
++      </div>
++    } @else if (!loaded()) {
++      @for (n of [1, 2, 3, 4]; track n) { <div class="skeleton sk"></div> }
++    } @else if (shown().length === 0) {
++      <div class="empty-state">
++        <span class="empty-icon"><app-icon name="bookmark" [size]="26" /></span>
++        @if (loans().length === 0) {
++          <h3>No loans yet</h3>
++          <p>Once users borrow books, they will show up here.</p>
++        } @else {
++          <h3>No loans match</h3>
++          <p>Try another tab or a different search.</p>
++        }
++      </div>
++    } @else {
++      <div class="table-scroll">
++        <table>
++          <thead>
++            <tr>
++              <th>Borrower</th>
++              <th>Book</th>
++              <th>Borrowed on</th>
++              <th>Due date</th>
++              <th>Returned on</th>
++              <th>Status</th>
++            </tr>
++          </thead>
++          <tbody>
++            @for (l of shown(); track l.id) {
++              <tr>
++                <td>
++                  <div class="person">
++                    <span class="avatar">{{ initials(l.userName) }}</span>
++                    <div>
++                      <div class="strong">{{ l.userName }}</div>
++                      <div class="sub-line">{{ l.userEmail }}</div>
++                    </div>
++                  </div>
++                </td>
++                <td>
++                  <div class="book">
++                    <span class="cover" [style]="tagStyle(l.title)">{{ (l.title || '?').charAt(0).toUpperCase() }}</span>
++                    <div>
++                      <div class="strong">{{ l.title }}</div>
++                      <div class="sub-line">{{ l.author }}</div>
++                    </div>
++                  </div>
++                </td>
++                <td>{{ l.borrowedAt | date: 'd MMM y, h:mm a' }}</td>
++                <td>
++                  {{ l.dueDate | date: 'd MMM y' }}
++                  @if (!l.returnedAt) {
++                    <div class="sub-line" [class.late]="l.status === 'OVERDUE'">{{ dueText(l) }}</div>
++                  }
++                </td>
++                <td>
++                  @if (l.returnedAt) { {{ l.returnedAt | date: 'd MMM y, h:mm a' }} } @else { <span class="muted">Not returned yet</span> }
++                </td>
++                <td>
++                  <span class="badge" [class.badge-info]="l.status === 'BORROWED'" [class.badge-danger]="l.status === 'OVERDUE'" [class.badge-success]="l.status === 'RETURNED'">
++                    {{ l.status === 'BORROWED' ? 'Borrowed' : l.status === 'OVERDUE' ? 'Overdue' : 'Returned' }}
++                  </span>
++                </td>
++              </tr>
++            }
++          </tbody>
++        </table>
++      </div>
++    }
++  </div>
++</section>
+diff --git a/src/app/admin-loans/admin-loans.ts b/src/app/admin-loans/admin-loans.ts
+new file mode 100644
+index 0000000..24dd163
+--- /dev/null
++++ b/src/app/admin-loans/admin-loans.ts
+@@ -0,0 +1,84 @@
++import { DatePipe } from '@angular/common';
++import { Component, OnInit, computed, inject, signal } from '@angular/core';
++import { FormsModule } from '@angular/forms';
++import { Loan } from '../models/loan';
++import { LoanService } from '../services/loan.service';
++import { Icon } from '../shared/icon';
++import { tagStyle } from '../shared/tag-style';
++
++type Filter = 'all' | 'active' | 'overdue' | 'returned';
++
++// Admin only: every loan of every user - who borrowed which book, and whether it came back.
++@Component({
++  selector: 'app-admin-loans',
++  imports: [DatePipe, FormsModule, Icon],
++  templateUrl: './admin-loans.html',
++  styleUrl: './admin-loans.css',
++})
++export class AdminLoans implements OnInit {
++  private api = inject(LoanService);
++  tagStyle = tagStyle;
++
++  loans = signal<Loan[]>([]);
++  loading = signal(false);
++  loaded = signal(false);
++  failed = signal(false);
++
++  filter = signal<Filter>('all');
++  search = signal('');
++
++  // not returned yet (includes overdue)
++  active = computed(() => this.loans().filter((l) => !l.returnedAt));
++  overdue = computed(() => this.loans().filter((l) => !l.returnedAt && l.status === 'OVERDUE'));
++  returned = computed(() => this.loans().filter((l) => !!l.returnedAt));
++
++  shown = computed(() => {
++    const byFilter =
++      this.filter() === 'active' ? this.active()
++      : this.filter() === 'overdue' ? this.overdue()
++      : this.filter() === 'returned' ? this.returned()
++      : this.loans();
++    const q = this.search().trim().toLowerCase();
++    if (!q) return byFilter;
++    return byFilter.filter((l) =>
++      [l.userName, l.userEmail, l.title, l.author].some((v) => (v ?? '').toLowerCase().includes(q))
++    );
++  });
++
++  ngOnInit() {
++    this.load();
++  }
++
++  load() {
++    if (this.loading()) return;
++    this.loading.set(true);
++    this.failed.set(false);
++    this.api.allLoans().subscribe({
++      next: (list) => {
++        this.loans.set(list);
++        this.loaded.set(true);
++        this.loading.set(false);
++      },
++      error: () => {
++        this.failed.set(true);
++        this.loading.set(false);
++      },
++    });
++  }
++
++  initials(name: string): string {
++    const parts = (name || '?').trim().split(/\s+/);
++    return ((parts[0]?.[0] ?? '?') + (parts[1]?.[0] ?? '')).toUpperCase();
++  }
++
++  // "Due in 3 days" / "Due today" / "2 days overdue"
++  dueText(loan: Loan): string {
++    const due = new Date(loan.dueDate + 'T00:00:00').getTime();
++    const now = new Date();
++    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
++    const days = Math.round((due - today) / 86_400_000);
++    if (days < 0) return `${-days} ${days === -1 ? 'day' : 'days'} overdue`;
++    if (days === 0) return 'Due today';
++    return `Due in ${days} ${days === 1 ? 'day' : 'days'}`;
++  }
++}
 diff --git a/src/app/app.routes.ts b/src/app/app.routes.ts
-index de2d383..defb17b 100644
+index defb17b..ee90d10 100644
 --- a/src/app/app.routes.ts
 +++ b/src/app/app.routes.ts
-@@ -3,7 +3,7 @@ import { AuthPage } from './auth-page/auth-page';
- import { BookDialog } from './book-dialog/book-dialog';
- import { BookManager } from './book-manager/book-manager';
+@@ -5,6 +5,7 @@ import { BookManager } from './book-manager/book-manager';
  import { Dashboard } from './dashboard/dashboard';
--import { adminGuard, authGuard, guestGuard } from './guards/auth.guard';
-+import { adminGuard, authGuard, guestGuard, homeGuard } from './guards/auth.guard';
+ import { adminGuard, authGuard, guestGuard, homeGuard } from './guards/auth.guard';
  import { Shell } from './layout/shell';
++import { AdminLoans } from './admin-loans/admin-loans';
  import { Profile } from './profile/profile';
  
-@@ -15,7 +15,7 @@ export const routes: Routes = [
-     component: Shell,
+ export const routes: Routes = [
+@@ -16,6 +17,7 @@ export const routes: Routes = [
      canActivate: [authGuard],
      children: [
--      { path: 'dashboard', component: Dashboard },
-+      { path: 'dashboard', component: Dashboard, canActivate: [adminGuard] }, // admin only
+       { path: 'dashboard', component: Dashboard, canActivate: [adminGuard] }, // admin only
++      { path: 'loans', component: AdminLoans, canActivate: [adminGuard] }, // admin only: who borrowed / returned what
        { path: 'profile', component: Profile },
        {
          path: 'books',
-@@ -26,7 +26,7 @@ export const routes: Routes = [
-           { path: ':id/edit', component: BookDialog, canActivate: [adminGuard] },
-         ],
-       },
--      { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
-+      { path: '', pathMatch: 'full', canActivate: [homeGuard], children: [] },
-     ],
-   },
-   { path: '**', redirectTo: '' },
-diff --git a/src/app/auth-page/auth-page.ts b/src/app/auth-page/auth-page.ts
-index 7363fa5..91307ae 100644
---- a/src/app/auth-page/auth-page.ts
-+++ b/src/app/auth-page/auth-page.ts
-@@ -54,7 +54,7 @@ export class AuthPage {
-       : this.auth.login({ email: f.email, password: f.password });
- 
-     request.pipe(finalize(() => this.loading.set(false))).subscribe({
--      next: () => this.router.navigate(['/dashboard']), // session is saved by AuthService
-+      next: () => this.router.navigate(['/']), // session is saved by AuthService
-       error: (err: Error) => this.error.set(err.message),
-     });
-   }
-diff --git a/src/app/book-manager/book-manager.html b/src/app/book-manager/book-manager.html
-index 8a61e4c..1bd149c 100644
---- a/src/app/book-manager/book-manager.html
-+++ b/src/app/book-manager/book-manager.html
-@@ -125,7 +125,7 @@
-                 </tr>
-               }
-             } @else {
--              @for (book of rows(); track book.id) {
-+              @for (book of rankedRows(); track book.id) {
-                 <tr>
-                   <td>
-                     <div class="book">
-@@ -147,17 +147,20 @@
-                   </td>
-                   <td class="desc" [title]="book.description ?? ''">{{ book.description }}</td>
-                   <td class="actions-col">
--                    @let mine = loans.activeByBook().get(book.id ?? -1);
--                    @if (mine) {
--                      <button type="button" class="btn btn-ghost btn-sm" [disabled]="!!loans.busy()" (click)="loans.giveBack(mine)">
--                        <app-icon name="undo" [size]="14" /> Return
--                      </button>
--                    } @else if (canBorrow(book)) {
--                      <button type="button" class="btn btn-primary btn-sm" [disabled]="!!loans.busy()" (click)="loans.borrow(book)">
--                        <app-icon name="bookmark" [size]="14" /> Borrow
--                      </button>
--                    } @else {
--                      <span class="unavailable">Unavailable</span>
-+                    @if (!canEdit()) {
-+                      <!-- borrow / return is for normal users only -->
-+                      @let mine = loans.activeByBook().get(book.id ?? -1);
-+                      @if (mine) {
-+                        <button type="button" class="btn btn-ghost btn-sm" [disabled]="!!loans.busy()" (click)="loans.giveBack(mine)">
-+                          <app-icon name="undo" [size]="14" /> Return
-+                        </button>
-+                      } @else if (canBorrow(book)) {
-+                        <button type="button" class="btn btn-primary btn-sm" [disabled]="!!loans.busy()" (click)="loans.borrow(book)">
-+                          <app-icon name="bookmark" [size]="14" /> Borrow
-+                        </button>
-+                      } @else {
-+                        <span class="unavailable">Unavailable</span>
-+                      }
-                     }
-                     @if (canEdit()) {
-                       <a class="icon-btn" [routerLink]="['/books', book.id, 'edit']" title="Edit" aria-label="Edit book"><app-icon name="pencil" [size]="16" /></a>
-diff --git a/src/app/book-manager/book-manager.ts b/src/app/book-manager/book-manager.ts
-index ab8ad51..ab196f2 100644
---- a/src/app/book-manager/book-manager.ts
-+++ b/src/app/book-manager/book-manager.ts
-@@ -3,7 +3,7 @@ import { Component, ElementRef, HostListener, OnInit, computed, inject, signal,
- import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
- import { FormsModule } from '@angular/forms';
- import { RouterLink, RouterOutlet } from '@angular/router';
--import { Subject, catchError, debounceTime, finalize, map, of, switchMap, tap } from 'rxjs';
-+import { Subject, catchError, debounceTime, distinctUntilChanged, finalize, map, of, switchMap, tap } from 'rxjs';
- import { Book, BookFilters, BookQuery, Page } from '../models/book';
- import { AuthService } from '../services/auth.service';
- import { BookService } from '../services/book.service';
-@@ -19,6 +19,18 @@ type SortDir = 'asc' | 'desc';
- 
- const emptyFilters: BookFilters = { category: '', language: '', publisher: '', available: '' };
- 
-+// How close a piece of text is to what was typed (lower = closer):
-+// 0 exact, 1 starts with it, 2 a word inside starts with it, 3 contains it, 9 no match
-+function matchScore(text: string | undefined, q: string): number {
-+  const t = (text ?? '').toLowerCase();
-+  if (!t || !q) return 9;
-+  if (t === q) return 0;
-+  if (t.startsWith(q)) return 1;
-+  if (t.split(/[\s,.\-_/]+/).some((w) => w.startsWith(q))) return 2;
-+  if (t.includes(q)) return 3;
-+  return 9;
-+}
-+
- @Component({
-   selector: 'app-book-manager',
-   imports: [FormsModule, RouterLink, RouterOutlet, Icon],
-@@ -65,6 +77,19 @@ export class BookManager implements OnInit {
-   hasFilters = computed(() => Object.values(this.filters()).some(Boolean));
- 
-   rows = computed(() => this.result()?.content ?? []);
-+
-+  // While searching, the closest matches (title or author starting with the typed text, e.g. "John")
-+  // go to the top. If the user clicked a column to sort, that order wins.
-+  rankedRows = computed(() => {
-+    const q = this.query().toLowerCase();
-+    const rows = this.rows();
-+    if (!q || this.sort().key) return rows;
-+    const score = (b: Book) => Math.min(matchScore(b.title, q), matchScore(b.author, q));
-+    return rows
-+      .map((book, i) => ({ book, i, s: score(book) }))
-+      .sort((a, b) => a.s - b.s || a.i - b.i) // equal score keeps the server's order
-+      .map((x) => x.book);
-+  });
-   total = computed(() => this.result()?.totalElements ?? 0);
-   totalPages = computed(() => Math.max(1, this.result()?.totalPages ?? 1));
-   rangeStart = computed(() => (this.total() ? (this.page() - 1) * this.pageSize() + 1 : 0));
-@@ -89,6 +114,7 @@ export class BookManager implements OnInit {
- 
-   private searchBox = viewChild<ElementRef<HTMLElement>>('searchBox');
-   private typing$ = new Subject<string>();
-+  private live$ = new Subject<string>(); // reloads the table while typing
-   private load$ = new Subject<void>();
- 
-   constructor() {
-@@ -140,7 +166,10 @@ export class BookManager implements OnInit {
-                   if (v && v.toLowerCase().includes(lower)) unique.add(v);
-                 })
-               );
--              return [...unique].slice(0, 8);
-+              // closest first: "John Smith" before "Big John"
-+              return [...unique]
-+                .sort((a, b) => matchScore(a, lower) - matchScore(b, lower))
-+                .slice(0, 8);
-             }),
-             catchError(() => of<string[]>([]))
-           );
-@@ -152,13 +181,23 @@ export class BookManager implements OnInit {
-         this.activeIndex.set(-1);
-       });
- 
-+    // Live table: 300ms after the user stops typing, search and reload the table (no Enter needed).
-+    this.live$
-+      .pipe(debounceTime(300), map((t) => t.trim()), distinctUntilChanged(), takeUntilDestroyed())
-+      .subscribe((t) => {
-+        if (t === this.query()) return; // Enter / suggestion click already searched this
-+        this.query.set(t);
-+        this.page.set(1);
-+        this.reload();
-+      });
-+
-     // after an add / edit / delete: ask the backend for the current page again
-     this.store.changes.pipe(takeUntilDestroyed()).subscribe(() => this.reload());
-   }
- 
-   ngOnInit() {
-     this.store.loadOptions();
--    this.loans.load(); // so each row knows whether I already borrowed it
-+    if (!this.canEdit()) this.loans.load(); // normal users only: so each row knows whether I already borrowed it
-     this.reload();
-   }
- 
-@@ -180,6 +219,7 @@ export class BookManager implements OnInit {
-     this.search.set(text);
-     this.showSuggestions.set(true);
-     this.typing$.next(text);
-+    this.live$.next(text);
-   }
- 
-   runSearch(text: string) {
-diff --git a/src/app/guards/auth.guard.ts b/src/app/guards/auth.guard.ts
-index e52efed..21482c0 100644
---- a/src/app/guards/auth.guard.ts
-+++ b/src/app/guards/auth.guard.ts
-@@ -8,8 +8,12 @@ export const authGuard: CanActivateFn = () =>
- 
- // /login is skipped if you are already logged in
- export const guestGuard: CanActivateFn = () =>
--  inject(AuthService).isLoggedIn() ? inject(Router).createUrlTree(['/dashboard']) : true;
-+  inject(AuthService).isLoggedIn() ? inject(Router).createUrlTree(['/']) : true;
- 
- // add / edit popups are for admins only
- export const adminGuard: CanActivateFn = () =>
-   inject(AuthService).session()?.role === 'ADMIN' ? true : inject(Router).createUrlTree(['/books']);
-+
-+// "/" sends admins to the dashboard and normal users straight to the books list
-+export const homeGuard: CanActivateFn = () =>
-+  inject(Router).createUrlTree([inject(AuthService).session()?.role === 'ADMIN' ? '/dashboard' : '/books']);
 diff --git a/src/app/layout/shell.html b/src/app/layout/shell.html
-index 22403e1..2d5ce67 100644
+index 2d5ce67..377ab37 100644
 --- a/src/app/layout/shell.html
 +++ b/src/app/layout/shell.html
-@@ -1,14 +1,16 @@
- <header class="nav">
-   <div class="nav-inner">
--    <a class="brand" routerLink="/dashboard" aria-label="Book Management home">
-+    <a class="brand" [routerLink]="isAdmin() ? '/dashboard' : '/books'" aria-label="Book Management home">
-       <span class="logo"><app-icon name="book" [size]="20" /></span>
-       <span class="brand-name">Book Management</span>
-     </a>
- 
-     <nav class="links" aria-label="Main">
--      <a routerLink="/dashboard" routerLinkActive="active">
--        <app-icon name="dashboard" [size]="18" /><span>Dashboard</span>
--      </a>
-+      @if (isAdmin()) {
-+        <a routerLink="/dashboard" routerLinkActive="active">
-+          <app-icon name="dashboard" [size]="18" /><span>Dashboard</span>
-+        </a>
-+      }
+@@ -14,6 +14,11 @@
        <a routerLink="/books" routerLinkActive="active">
          <app-icon name="library" [size]="18" /><span>Books</span>
        </a>
-
++      @if (isAdmin()) {
++        <a routerLink="/loans" routerLinkActive="active">
++          <app-icon name="bookmark" [size]="18" /><span>Loans</span>
++        </a>
++      }
+     </nav>
+ 
+     <div class="actions">
+diff --git a/src/app/models/loan.ts b/src/app/models/loan.ts
+index 854ea6a..dfd79ee 100644
+--- a/src/app/models/loan.ts
++++ b/src/app/models/loan.ts
+@@ -11,4 +11,7 @@ export interface Loan {
+   dueDate: string;
+   returnedAt: string | null;
+   status: LoanStatus;
++  // who borrowed it (always sent by the backend; shown on the admin Loans page)
++  userName: string;
++  userEmail: string;
+ }
+diff --git a/src/app/services/loan.service.ts b/src/app/services/loan.service.ts
+index 2d860bc..d9f1869 100644
+--- a/src/app/services/loan.service.ts
++++ b/src/app/services/loan.service.ts
+@@ -14,6 +14,11 @@ export class LoanService {
+     return this.http.get<Loan[]>(`${LOANS_URL}/my`);
+   }
+ 
++  // ADMIN only: every loan of every user
++  allLoans(): Observable<Loan[]> {
++    return this.http.get<Loan[]>(LOANS_URL);
++  }
++
+   borrow(bookId: number | string): Observable<Loan> {
+     return this.http.post<Loan>(`${LOANS_URL}/${bookId}`, null);
+   }

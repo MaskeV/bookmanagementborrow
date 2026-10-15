@@ -14,6 +14,11 @@
       <a routerLink="/books" routerLinkActive="active">
         <app-icon name="library" [size]="18" /><span>Books</span>
       </a>
+      @if (isAdmin()) {
+        <a routerLink="/loans" routerLinkActive="active">
+          <app-icon name="bookmark" [size]="18" /><span>Loans</span>
+        </a>
+      }
     </nav>
 
     <div class="actions">
